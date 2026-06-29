@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "author": "Muskan Sehar",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -48, "left": -23.96, "attrs": {} },
+    { "type": "wokwi-mpu6050", "id": "imu1", "top": 234.22, "left": -141.68, "attrs": {} },
+    {
+      "type": "wokwi-max7219-matrix",
+      "id": "matrix1",
+      "top": -143.4,
+      "left": -98.16,
+      "attrs": { "chain": "4" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "imu1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "imu1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "imu1:SDA", "esp:21", "green", [ "v-19.2", "h182.48", "v-144" ] ],
+    [ "imu1:SCL", "esp:22", "green", [ "v-9.6", "h182.48", "v-182.4" ] ],
+    [ "esp:5V", "matrix1:V+", "red", [ "h-9.45", "v48", "h316.8", "v-374.4" ] ],
+    [ "matrix1:GND", "esp:GND.2", "black", [ "h38.4", "v144" ] ],
+    [ "matrix1:DIN", "esp:23", "green", [ "h28.8", "v144" ] ],
+    [ "matrix1:CS", "esp:5", "green", [ "h19.2", "v211.2" ] ],
+    [ "matrix1:CLK", "esp:18", "green", [ "h9.6", "v192" ] ]
+  ],
+  "dependencies": {}
+}

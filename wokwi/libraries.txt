@@ -1,0 +1,5 @@
+# Wokwi Library List
+# These libraries are required to compile this project
+
+MPU6050
+MD_MAX72XX
