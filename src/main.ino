@@ -15,10 +15,17 @@ MD_MAX72XX matrix = MD_MAX72XX(MD_MAX72XX::FC16_HW,
 
 #define COLS 32
 #define ROWS  8
-#define LERP 0.1
 
-float smoothX = 16.0;
-float smoothY =  4.0;
+// ── Physics constants — tweak these to change feel ─
+#define ACCEL_SCALE  0.0003  // how strongly tilt pushes ball
+#define FRICTION     0.97    // 1.0 = no friction, 0.0 = instant stop
+#define MAX_VEL      1.5     // speed cap
+
+// ── Ball state ─────────────────────────────────────
+float ballX = 16.0;
+float ballY =  4.0;
+float velX  =  0.0;  // NEW — ball now has velocity
+float velY  =  0.0;
 
 void drawPixel(int x, int y) {
   matrix.clear();
@@ -45,30 +52,39 @@ void loop() {
   int16_t ax, ay, az;
   imu.getAcceleration(&ax, &ay, &az);
 
-  // Map full int16 range to grid
-  int targetX;
-  if (ax >= 32767)       targetX = 31;
-  else if (ax <= -32768) targetX = 0;
-  else                   targetX = constrain(map(ax, -32768, 32767, 0, 32), 0, 31);
+  // 1. Tilt adds force to velocity
+  //    Before: tilt SET position directly
+  //    Now:    tilt PUSHES the ball, velocity builds up
+  velX += ax * ACCEL_SCALE;
+  velY -= ay * ACCEL_SCALE;
 
-  int targetY = constrain(map(ay, -32768, 32767, ROWS - 1, 0), 0, ROWS - 1);
+  // 2. Friction — shrinks velocity each frame
+  //    Without this ball slides forever
+  velX *= FRICTION;
+  velY *= FRICTION;
 
-  // Snap to edges, lerp everywhere else
-  if (targetX == 31)       smoothX = 31;
-  else if (targetX == 0)   smoothX = 0;
-  else                     smoothX += (targetX - smoothX) * LERP;
+  // 3. Speed cap — prevents ball flying too fast
+  velX = constrain(velX, -MAX_VEL, MAX_VEL);
+  velY = constrain(velY, -MAX_VEL, MAX_VEL);
 
-  if (targetY == ROWS - 1) smoothY = ROWS - 1;
-  else if (targetY == 0)   smoothY = 0;
-  else                     smoothY += (targetY - smoothY) * LERP;
+  // 4. Move ball by its velocity
+  ballX += velX;
+  ballY += velY;
 
-  int drawX = constrain((int)smoothX, 0, COLS - 1);
-  int drawY = constrain((int)smoothY, 0, ROWS - 1);
+  // 5. Bounce off walls
+  //    Flip velocity and lose some energy on impact
+  if (ballX < 0)        { ballX = 0;        velX = -velX * 0.6; }
+  if (ballX > COLS - 1) { ballX = COLS - 1; velX = -velX * 0.6; }
+  if (ballY < 0)        { ballY = 0;        velY = -velY * 0.6; }
+  if (ballY > ROWS - 1) { ballY = ROWS - 1; velY = -velY * 0.6; }
 
+  // 6. Draw
+  int drawX = constrain((int)ballX, 0, COLS - 1);
+  int drawY = constrain((int)ballY, 0, ROWS - 1);
   drawPixel(drawX, drawY);
 
-  Serial.print("AX: "); Serial.print(ax);
-  Serial.print(" AY: "); Serial.print(ay);
+  Serial.print("velX: "); Serial.print(velX);
+  Serial.print(" velY: "); Serial.print(velY);
   Serial.print(" -> X: "); Serial.print(drawX);
   Serial.print(" Y: "); Serial.println(drawY);
 
