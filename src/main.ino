@@ -16,23 +16,91 @@ MD_MAX72XX matrix = MD_MAX72XX(MD_MAX72XX::FC16_HW,
 #define COLS 32
 #define ROWS  8
 
-// ── Physics constants — tweak these to change feel ─
-#define ACCEL_SCALE  0.0003  // how strongly tilt pushes ball
-#define FRICTION     0.97    // 1.0 = no friction, 0.0 = instant stop
-#define MAX_VEL      1.5     // speed cap
+// ── Physics ───────────────────────────────────────
+#define ACCEL_SCALE  0.0002
+#define FRICTION     0.80
+#define MAX_VEL      0.8
 
-// ── Ball state ─────────────────────────────────────
-float ballX = 16.0;
-float ballY =  4.0;
-float velX  =  0.0;  // NEW — ball now has velocity
-float velY  =  0.0;
+float ballX = 1.0;
+float ballY = 1.0;
+float velX  = 0.0;
+float velY  = 0.0;
 
+// ── Previous ball position ────────────────────────
+int prevX = 1;
+int prevY = 1;
+
+// ── Goal ──────────────────────────────────────────
+#define GOAL_X 30
+#define GOAL_Y  6
+
+// ── Maze ──────────────────────────────────────────
+const bool maze[ROWS][COLS] = {
+  {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
+  {1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1},
+  {1,0,1,0,1,0,1,1,1,1,0,1,1,0,1,1,1,0,1,0,1,1,1,1,0,1,1,1,0,1,0,1},
+  {1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1,0,1},
+  {1,0,1,1,1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1,0,0,0,1},
+  {1,0,0,0,0,0,1,0,0,0,0,1,0,0,1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,1,0,1},
+  {1,1,1,0,1,0,1,1,1,0,1,1,1,0,1,1,0,1,0,1,0,1,1,1,0,1,1,1,0,1,0,1},
+  {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
+};
+
+// ── Blink ─────────────────────────────────────────
+bool goalVisible = true;
+int  blinkCounter = 0;
+#define BLINK_RATE 6
+
+// ── Draw a pixel ──────────────────────────────────
 void drawPixel(int x, int y) {
-  matrix.clear();
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
   int device = x / 8;
   int colBit = 7 - (x % 8);
-  uint8_t rowByte = (1 << colBit);
-  matrix.setRow(device, y, rowByte);
+  matrix.setRow(device, y, matrix.getRow(device, y) | (1 << colBit));
+}
+
+// ── Clear a pixel (only if not a wall) ────────────
+void clearPixel(int x, int y) {
+  if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
+  if (maze[y][x]) return;  // never clear a wall
+  int device = x / 8;
+  int colBit = 7 - (x % 8);
+  matrix.setRow(device, y, matrix.getRow(device, y) & ~(1 << colBit));
+}
+
+// ── Draw maze once ────────────────────────────────
+void drawMaze() {
+  for (int row = 0; row < ROWS; row++) {
+    for (int col = 0; col < COLS; col++) {
+      if (maze[row][col]) drawPixel(col, row);
+    }
+  }
+}
+
+// ── Win animation ─────────────────────────────────
+void winAnimation() {
+  // Rapid flashes at goal
+  for (int i = 0; i < 10; i++) {
+    drawPixel(GOAL_X, GOAL_Y);
+    delay(80);
+    clearPixel(GOAL_X, GOAL_Y);
+    delay(80);
+  }
+  // Full display flash x2
+  for (int i = 0; i < 2; i++) {
+    for (int d = 0; d < NUM_DEVICES; d++)
+      for (int r = 0; r < ROWS; r++)
+        matrix.setRow(d, r, 0xFF);
+    delay(200);
+    matrix.clear();
+    delay(200);
+  }
+  // Reset
+  ballX = 1.0; ballY = 1.0;
+  velX  = 0.0; velY  = 0.0;
+  prevX = 1;   prevY = 1;
+  // Redraw maze after full clear
+  drawMaze();
 }
 
 void setup() {
@@ -46,46 +114,71 @@ void setup() {
   }
   matrix.begin();
   matrix.clear();
+  drawMaze();  // draw maze once at start, never clear it again
 }
 
 void loop() {
   int16_t ax, ay, az;
   imu.getAcceleration(&ax, &ay, &az);
 
-  // 1. Tilt adds force to velocity
-  //    Before: tilt SET position directly
-  //    Now:    tilt PUSHES the ball, velocity builds up
+  // ── Physics ───────────────────────────────────
   velX += ax * ACCEL_SCALE;
   velY -= ay * ACCEL_SCALE;
-
-  // 2. Friction — shrinks velocity each frame
-  //    Without this ball slides forever
   velX *= FRICTION;
   velY *= FRICTION;
-
-  // 3. Speed cap — prevents ball flying too fast
   velX = constrain(velX, -MAX_VEL, MAX_VEL);
   velY = constrain(velY, -MAX_VEL, MAX_VEL);
 
-  // 4. Move ball by its velocity
-  ballX += velX;
-  ballY += velY;
+  float nextX = ballX + velX;
+  float nextY = ballY + velY;
 
-  // 5. Bounce off walls
-  //    Flip velocity and lose some energy on impact
-  if (ballX < 0)        { ballX = 0;        velX = -velX * 0.6; }
-  if (ballX > COLS - 1) { ballX = COLS - 1; velX = -velX * 0.6; }
-  if (ballY < 0)        { ballY = 0;        velY = -velY * 0.6; }
-  if (ballY > ROWS - 1) { ballY = ROWS - 1; velY = -velY * 0.6; }
+  // ── Wall collision ────────────────────────────
+  if (nextX >= 0 && nextX < COLS &&
+      maze[(int)ballY][(int)nextX]) {
+    velX = -velX * 0.4;
+    nextX = ballX;
+  }
+  if (nextY >= 0 && nextY < ROWS &&
+      maze[(int)nextY][(int)ballX]) {
+    velY = -velY * 0.4;
+    nextY = ballY;
+  }
 
-  // 6. Draw
-  int drawX = constrain((int)ballX, 0, COLS - 1);
-  int drawY = constrain((int)ballY, 0, ROWS - 1);
+  ballX = constrain(nextX, 0, COLS - 1);
+  ballY = constrain(nextY, 0, ROWS - 1);
+
+  int drawX = (int)ballX;
+  int drawY = (int)ballY;
+
+  // ── Win check ────────────────────────────────
+  if (drawX == GOAL_X && drawY == GOAL_Y) {
+    winAnimation();
+    return;
+  }
+
+  // ── Blink goal ───────────────────────────────
+  blinkCounter++;
+  if (blinkCounter >= BLINK_RATE) {
+    goalVisible = !goalVisible;
+    blinkCounter = 0;
+  }
+
+  // ── Draw — no matrix.clear() ─────────────────
+  // Only erase previous ball position
+  clearPixel(prevX, prevY);
+
+  // Draw goal blink
+  if (goalVisible) drawPixel(GOAL_X, GOAL_Y);
+  else clearPixel(GOAL_X, GOAL_Y);
+
+  // Draw ball
   drawPixel(drawX, drawY);
 
-  Serial.print("velX: "); Serial.print(velX);
-  Serial.print(" velY: "); Serial.print(velY);
-  Serial.print(" -> X: "); Serial.print(drawX);
+  // Save position for next frame
+  prevX = drawX;
+  prevY = drawY;
+
+  Serial.print("X: "); Serial.print(drawX);
   Serial.print(" Y: "); Serial.println(drawY);
 
   delay(50);
