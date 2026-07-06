@@ -1,70 +1,93 @@
-# Gesture-Controlled LED Matrix
+# SpotifyClone
 
-An ESP32 project that reads tilt data from an MPU6050 accelerometer and moves a dot across an 8x8 LED matrix in real time. Developed and tested in Wokwi (ESP32 simulator), so no physical hardware was required.
+A C++ desktop music player built with Raylib. This was a learning project — the main goal was to strengthen object-oriented design in C++ (separating responsibilities cleanly across classes), while using the UI as a sandbox to explore what's possible with a low-level graphics library like Raylib (no UI framework, no image assets — every icon is hand-drawn with primitive shapes).
 
-This was one of my first embedded systems projects. My goal wasn't just to make a moving dot—it was to understand how sensors, microcontrollers, and displays communicate, and to become familiar with hardware simulation as a development workflow.
+This isn't a finished, polished app. It's an exploration project, built and iterated on with a friend.
 
 ---
 
 ## What it does
 
-- Reads X and Y acceleration from the MPU6050 at ~20fps
-- Maps tilt angle to a grid coordinate (0–7 on each axis)
-- Renders a moving dot on the MAX7219-driven 8x8 LED matrix
-- Prints live sensor values to the serial monitor for debugging
+- Play / pause / skip / previous
+- Auto-scans a `music/` folder for `.mp3`, `.wav`, `.ogg` files
+- Collapsed mini-player + an expandable full view with a sidebar song list
+- Shuffle and repeat
+- Volume control (draggable bar + keyboard)
+- Progress bar with elapsed/remaining time
 
 ---
 
 ## Built with
 
-- ESP32 DevKit C
-- MPU6050 — 6-axis IMU, communicates over I2C
-- MAX7219 + 8x8 LED Matrix — driven over SPI
-- Arduino C++ — Wire.h, MPU6050.h, MD_MAX72XX.h
-- [Wokwi](https://wokwi.com) — browser-based ESP32 simulator
+- C++17
+- [Raylib](https://www.raylib.com/) 5.5 — windowing, rendering, and audio (pulled in automatically via CMake's `FetchContent`)
+- CMake
 
 ---
 
 ## Project structure
 
 ```
-Gesture-Controlled-LED-Matrix/
+SpotifyClone/
+├── include/
+│   ├── Song.h           # A single track (title, artist, file path)
+│   ├── Playlist.h        # A named collection of songs
+│   ├── MusicLibrary.h     # Scans a folder and builds the song list
+│   ├── Player.h           # Audio playback engine
+│   └── UI.h               # UI class declaration
 ├── src/
-│   └── main.ino          # Main firmware — sensor read, mapping, display
-├── wokwi/
-│   ├── diagram.json      # Circuit definition for Wokwi simulator
-│   └── libraries.txt     # Required libraries
-└── docs/
+│   ├── main.cpp
+│   ├── Player.cpp         # Load/play/pause/next/prev/volume logic
+│   └── UI.cpp              # All rendering + input handling
+├── music/                  # Drop .mp3/.wav/.ogg files here
+└── CMakeLists.txt
 ```
+
+The split between `Song`, `Playlist`, `MusicLibrary`, `Player`, and `UI` was the main point of the exercise — each class has one job, and `Player`/`UI` don't know anything about *how* songs are stored on disk, just that they get handed a `Song` or a `vector<Song>`.
 
 ---
 
-## Simulation
+## Getting started
 
-Open [Wokwi](https://wokwi.com), create a new ESP32 project, paste `src/main.ino` and `wokwi/diagram.json`, add the two libraries, and hit Play. Click the MPU6050 chip to open tilt sliders and control the dot in real time.
+**Prerequisites:** CMake 3.16+, a C++17 compiler, Git
 
-**Libraries needed:**
-- MPU6050 by Electronic Cats
-- MD_MAX72XX by majicDesigns
+```bash
+git clone https://github.com/MuskanSehar/SpotifyClone.git
+cd SpotifyClone
+
+cmake -B build
+cmake --build build
+
+./build/SpotifyClone
+```
+
+Raylib downloads and builds automatically on first run via CMake — no manual install needed. Add your own audio files to `music/` before running.
+
+---
+
+## Controls
+
+| Action | Control |
+|---|---|
+| Play / Pause | `Space` or click the play button |
+| Next / Previous track | `→` / `←` or click the buttons |
+| Volume up / down | `↑` / `↓` or drag the volume bar |
+| Expand / collapse player | Click the mini-player / `Esc` or click ✕ |
+| Play a specific song | Click it in the sidebar (expanded view) |
+| Toggle shuffle / repeat | Click their icons (expanded view) |
 
 ---
 
 ## What this was actually for
 
-- Explore hardware simulation using Wokwi before working with physical hardware
-- Learn how an ESP32 communicates with peripherals using I2C and SPI
-- Understand how raw accelerometer readings can be processed into useful outputs
-- Practice building and debugging embedded systems in a simulated environment
-- Gain confidence with embedded C++ and Arduino libraries
+- Practicing class design and separation of concerns in C++
+- Getting hands-on with Raylib — audio streaming, immediate-mode rendering, drawing UI from raw shapes instead of a framework
+- Working through a shared codebase with a friend over Git (branches, merges, syncing changes)
 
+It's rough in places and there's plenty I'd improve, but it did what I wanted it to: it forced me to actually think about how to structure a non-trivial C++ project instead of writing everything in one file.
 
 ---
 
-## Planned improvements
+## Credits
 
-- Complementary filter for smoother, drift-free motion
-- Trail effect — last 3 positions stay lit
-- Tilt-controlled snake game
-- WiFi data logging to a web dashboard
-
-
+Built by [Muskan Sehar](https://github.com/MuskanSehar) and [Hassan Mehdi](https://github.com/Hassan-etc).
