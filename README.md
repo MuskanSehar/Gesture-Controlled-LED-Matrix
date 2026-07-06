@@ -1,93 +1,95 @@
-# SpotifyClone
+# Gesture-Controlled LED Matrix
 
-A C++ desktop music player built with Raylib. This was a learning project — the main goal was to strengthen object-oriented design in C++ (separating responsibilities cleanly across classes), while using the UI as a sandbox to explore what's possible with a low-level graphics library like Raylib (no UI framework, no image assets — every icon is hand-drawn with primitive shapes).
+An ESP32 project that started as a tilt-controlled dot on an 8x8 LED matrix and evolved into a physics-based maze game — built and tested entirely in Wokwi without any physical hardware.
 
-This isn't a finished, polished app. It's an exploration project, built and iterated on with a friend.
+My goal wasn't just to make something that works. It was to understand how sensors, microcontrollers, and displays communicate at the protocol level, and to learn embedded development workflow through simulation before touching real hardware.
 
 ---
 
-## What it does
+## How it evolved
 
-- Play / pause / skip / previous
-- Auto-scans a `music/` folder for `.mp3`, `.wav`, `.ogg` files
-- Collapsed mini-player + an expandable full view with a sidebar song list
-- Shuffle and repeat
-- Volume control (draggable bar + keyboard)
-- Progress bar with elapsed/remaining time
+Each commit builds directly on the last. The repository is designed to show learning over time, not just a final result.
+
+| Commit | What was built | What was learned |
+|---|---|---|
+| 1 | Dot control on 8x8 matrix | I2C, SPI, raw sensor mapping |
+| 2 | Expanded to 32x8 across 4 chained panels | Lerp smoothing, float vs int, panel addressing |
+| 3 | Ball physics — momentum and friction | Velocity, acceleration, physics simulation |
+| 4 | Maze game with real-time collision detection | 2D arrays, collision detection, millis() timing |
+
+---
+
+## What it does (current state)
+
+- Reads X and Y acceleration from the MPU6050 at ~20fps
+- Applies physics — tilt adds force, friction decelerates the ball
+- Navigates a hardcoded 32x8 maze with real-time wall collision
+- Blinking goal marks the target — reach it to trigger a win animation and reset
 
 ---
 
 ## Built with
 
-- C++17
-- [Raylib](https://www.raylib.com/) 5.5 — windowing, rendering, and audio (pulled in automatically via CMake's `FetchContent`)
-- CMake
+- ESP32 DevKit C
+- MPU6050 — 6-axis IMU, communicates over I2C
+- MAX7219 + 32x8 LED Matrix — 4 chained 8x8 panels driven over SPI
+- Arduino C++ — Wire.h, MPU6050.h, MD_MAX72XX.h
+- [Wokwi](https://wokwi.com) — browser-based ESP32 simulator
 
 ---
 
 ## Project structure
 
 ```
-SpotifyClone/
-├── include/
-│   ├── Song.h           # A single track (title, artist, file path)
-│   ├── Playlist.h        # A named collection of songs
-│   ├── MusicLibrary.h     # Scans a folder and builds the song list
-│   ├── Player.h           # Audio playback engine
-│   └── UI.h               # UI class declaration
+Gesture-Controlled-LED-Matrix/
 ├── src/
-│   ├── main.cpp
-│   ├── Player.cpp         # Load/play/pause/next/prev/volume logic
-│   └── UI.cpp              # All rendering + input handling
-├── music/                  # Drop .mp3/.wav/.ogg files here
-└── CMakeLists.txt
+│   └── main.ino          # Main firmware — sensor read, physics, maze, display
+├── wokwi/
+│   ├── diagram.json      # Circuit definition for Wokwi simulator
+│   └── libraries.txt     # Required libraries
+└── docs/
 ```
-
-The split between `Song`, `Playlist`, `MusicLibrary`, `Player`, and `UI` was the main point of the exercise — each class has one job, and `Player`/`UI` don't know anything about *how* songs are stored on disk, just that they get handed a `Song` or a `vector<Song>`.
 
 ---
 
-## Getting started
+## Simulation
 
-**Prerequisites:** CMake 3.16+, a C++17 compiler, Git
+Open [Wokwi](https://wokwi.com), create a new ESP32 project, paste `src/main.ino` and `wokwi/diagram.json`, add the two libraries, and hit Play. Click the MPU6050 chip to open tilt sliders and navigate the maze.
 
-```bash
-git clone https://github.com/MuskanSehar/SpotifyClone.git
-cd SpotifyClone
-
-cmake -B build
-cmake --build build
-
-./build/SpotifyClone
-```
-
-Raylib downloads and builds automatically on first run via CMake — no manual install needed. Add your own audio files to `music/` before running.
-
----
-
-## Controls
-
-| Action | Control |
-|---|---|
-| Play / Pause | `Space` or click the play button |
-| Next / Previous track | `→` / `←` or click the buttons |
-| Volume up / down | `↑` / `↓` or drag the volume bar |
-| Expand / collapse player | Click the mini-player / `Esc` or click ✕ |
-| Play a specific song | Click it in the sidebar (expanded view) |
-| Toggle shuffle / repeat | Click their icons (expanded view) |
+**Libraries needed:**
+- MPU6050 by Electronic Cats
+- MD_MAX72XX by majicDesigns
 
 ---
 
 ## What this was actually for
 
-- Practicing class design and separation of concerns in C++
-- Getting hands-on with Raylib — audio streaming, immediate-mode rendering, drawing UI from raw shapes instead of a framework
-- Working through a shared codebase with a friend over Git (branches, merges, syncing changes)
-
-It's rough in places and there's plenty I'd improve, but it did what I wanted it to: it forced me to actually think about how to structure a non-trivial C++ project instead of writing everything in one file.
+- Understand how I2C and SPI work in practice — not just in theory
+- Learn how raw accelerometer data gets processed into useful outputs
+- Build a physics simulation from scratch — velocity, friction, collision
+- Get comfortable with Wokwi as a development and debugging environment
+- Practice iterative embedded development — each commit adds one new concept
 
 ---
 
-## Credits
+## What simulation taught me
 
-Built by [Muskan Sehar](https://github.com/MuskanSehar) and [Hassan Mehdi](https://github.com/Hassan-etc).
+Wokwi was the right tool for learning protocols and logic, but it exposed some real limitations worth documenting:
+
+**Sensor calibration** — the simulator's MPU6050 outputs different raw ranges than real hardware. The `map()` function had to be tuned by reading serial output and adjusting bounds manually rather than trusting the datasheet.
+
+**Simulation vs physical interaction** — the maze uses physics-based controls designed for real hardware where you tilt a board naturally with both axes at once. In Wokwi, X and Y are separate sliders — impossible to control simultaneously. Same code, completely different experience. This is why embedded projects need physical testing, not just simulation.
+
+**Panel addressing** — chaining four 8x8 matrices into a 32x8 display required manually calculating device index and bit position for every pixel. The library doesn't treat chained panels as one continuous grid, so `setPoint()` had to be replaced with `setRow()` and bitwise operations.
+
+**Timing** — using `delay()` blocks the entire loop, breaking independent animations. Switching to `millis()`-based timing allowed the goal to blink independently of ball movement — a pattern used in almost every real embedded project.
+
+---
+
+## Planned improvements
+
+- Complementary filter for smoother, drift-free motion
+- Snake game — tilt to steer, grow on food, die on collision
+- Game selector — flip board upside down (Z axis) to switch between games
+- Random maze generation using recursive backtracker algorithm
+- WiFi data logging to a web dashboard
